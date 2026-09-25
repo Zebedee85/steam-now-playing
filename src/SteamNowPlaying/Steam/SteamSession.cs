@@ -196,7 +196,7 @@ public sealed class SteamSession : IDisposable
         if (saved is null) return;
 
         SetState(SteamState.SigningIn, null);
-        _ = user.LogOn(new SteamUser.LogOnDetails
+        user.LogOn(new SteamUser.LogOnDetails
         {
             Username = saved.AccountName,
             AccessToken = saved.RefreshToken,
