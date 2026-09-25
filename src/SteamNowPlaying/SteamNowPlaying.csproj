@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>SteamNowPlaying</RootNamespace>
+    <AssemblyName>SteamNowPlaying</AssemblyName>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <ApplicationHighDpiMode>SystemAware</ApplicationHighDpiMode>
+    <ApplicationVisualStyles>true</ApplicationVisualStyles>
+    <ApplicationUseCompatibleTextRendering>false</ApplicationUseCompatibleTextRendering>
+    <Product>Steam Now Playing</Product>
+    <Description>Shows what you're playing on Spotify as your Steam status.</Description>
+    <Company>Zebedee85</Company>
+    <Copyright>Copyright (c) 2026 Zebedee85</Copyright>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- Spotify app Client ID baked in at build time: dotnet publish -p:SpotifyClientId=... -->
+    <SpotifyClientId Condition="'$(SpotifyClientId)' == ''"></SpotifyClientId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SteamKit2" Version="3.4.0" />
+    <PackageReference Include="QRCoder" Version="1.8.0" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="SpotifyClientId" Value="$(SpotifyClientId)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="SteamNowPlaying.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,63 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Test
+        run: dotnet test tests/SteamNowPlaying.Tests/SteamNowPlaying.Tests.csproj -c Release
+
+      - name: Publish single-file exe
+        shell: pwsh
+        env:
+          SPOTIFY_CLIENT_ID: ${{ vars.SPOTIFY_CLIENT_ID }}
+        run: |
+          $publishArgs = @(
+            'publish', 'src/SteamNowPlaying/SteamNowPlaying.csproj',
+            '-c', 'Release', '-r', 'win-x64', '--self-contained', 'true',
+            '-p:PublishSingleFile=true',
+            '-p:IncludeNativeLibrariesForSelfExtract=true',
+            '-p:EnableCompressionInSingleFile=true',
+            '-p:DebugType=none',
+            '-o', 'out'
+          )
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            $publishArgs += "-p:VersionPrefix=$($env:GITHUB_REF_NAME.TrimStart('v'))"
+          } else {
+            $publishArgs += '-p:VersionPrefix=0.0.0', "-p:VersionSuffix=dev.$($env:GITHUB_RUN_NUMBER)"
+          }
+          if ($env:SPOTIFY_CLIENT_ID) {
+            $publishArgs += "-p:SpotifyClientId=$($env:SPOTIFY_CLIENT_ID)"
+          } else {
+            Write-Host "::warning::SPOTIFY_CLIENT_ID repository variable not set; users will need their own Client ID."
+          }
+          dotnet @publishArgs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SteamNowPlaying
+          path: out/SteamNowPlaying.exe
+
+      - name: Create release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/SteamNowPlaying.exe
+          generate_release_notes: true
