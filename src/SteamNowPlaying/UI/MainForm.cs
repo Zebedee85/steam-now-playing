@@ -11,6 +11,7 @@ sealed class MainForm : Form
 
     readonly AppSettings settings;
     readonly StatusSync sync;
+    readonly UpdateChecker updates;
 
     readonly Label lblHeading = new();
     readonly Label lblStatus = new();
@@ -30,9 +31,11 @@ sealed class MainForm : Form
     readonly CheckBox chkPause = new();
     readonly Button btnSettings = new();
     readonly LinkLabel lnkAbout = new();
+    readonly LinkLabel lnkUpdate = new();
 
     readonly NotifyIcon tray = new();
     readonly ToolStripMenuItem trayPause = new("Pause sharing");
+    readonly ToolStripMenuItem trayUpdate = new();
 
     bool allowVisible;
     bool exiting;
@@ -42,11 +45,13 @@ sealed class MainForm : Form
     SteamAction steamAction;
     SpotifyAction spotifyAction;
     bool updatingPause;
+    bool balloonIsUpdate;
 
     public MainForm(AppSettings settings, bool startHidden)
     {
         this.settings = settings;
         sync = new StatusSync(settings);
+        updates = new UpdateChecker(() => settings.CheckForUpdates);
 
         // Start in the tray only if there's nothing to set up.
         allowVisible = !startHidden || !sync.Steam.HasSavedLogin || sync.Spotify?.IsConnected != true;
@@ -67,6 +72,7 @@ sealed class MainForm : Form
         BuildTray(appIcon);
 
         sync.Changed += QueueRefresh;
+        updates.UpdateFound += OnUpdateFound;
         Resize += (_, _) =>
         {
             if (WindowState == FormWindowState.Minimized) HideToTray();
@@ -185,9 +191,15 @@ sealed class MainForm : Form
         lnkAbout.Margin = new Padding(0, S(6), 0, 0);
         lnkAbout.LinkClicked += (_, _) => ShowAbout();
 
+        lnkUpdate.AutoSize = true;
+        lnkUpdate.Margin = new Padding(S(12), S(6), 0, 0);
+        lnkUpdate.Visible = false;
+        lnkUpdate.LinkClicked += (_, _) => OpenUpdatePage();
+
         bottom.Controls.Add(chkPause);
         bottom.Controls.Add(btnSettings);
         bottom.Controls.Add(lnkAbout);
+        bottom.Controls.Add(lnkUpdate);
 
         root.Controls.Add(lblHeading, 0, 0);
         root.Controls.Add(lblStatus, 0, 1);
@@ -246,6 +258,9 @@ sealed class MainForm : Form
     {
         var menu = new ContextMenuStrip();
         menu.Items.Add("Open", null, (_, _) => ShowFromTray());
+        trayUpdate.Visible = false;
+        trayUpdate.Click += (_, _) => OpenUpdatePage();
+        menu.Items.Add(trayUpdate);
         trayPause.CheckOnClick = false;
         trayPause.Click += (_, _) => SetPaused(!settings.Paused);
         menu.Items.Add(trayPause);
@@ -256,6 +271,7 @@ sealed class MainForm : Form
         tray.Text = BuildInfo.AppName;
         tray.ContextMenuStrip = menu;
         tray.DoubleClick += (_, _) => ShowFromTray();
+        tray.BalloonTipClicked += (_, _) => { if (balloonIsUpdate) OpenUpdatePage(); };
         tray.Visible = true;
     }
 
@@ -291,6 +307,7 @@ sealed class MainForm : Form
         started = true;
         RefreshUi();
         sync.Start();
+        updates.Start();
     }
 
     protected override void WndProc(ref Message m)
@@ -317,6 +334,8 @@ sealed class MainForm : Form
     protected override void OnFormClosed(FormClosedEventArgs e)
     {
         sync.Changed -= QueueRefresh;
+        updates.UpdateFound -= OnUpdateFound;
+        updates.Dispose();
         sync.Dispose(); // clears the Steam status and signs this session off
         tray.Visible = false;
         tray.Dispose();
@@ -339,6 +358,7 @@ sealed class MainForm : Form
         {
             settings.TrayHintShown = true;
             settings.Save();
+            balloonIsUpdate = false;
             tray.ShowBalloonTip(4000, BuildInfo.AppName, "Still running here in the tray. Right-click the icon to quit.", ToolTipIcon.None);
         }
     }
@@ -431,6 +451,36 @@ sealed class MainForm : Form
         if (answer == DialogResult.Yes) OpenUrl(BuildInfo.RepoUrl);
     }
 
+    void OnUpdateFound(AvailableUpdate update)
+    {
+        try
+        {
+            if (IsHandleCreated && !IsDisposed) BeginInvoke(new Action(() => AnnounceUpdate(update)));
+        }
+        catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException)
+        {
+            // Closing.
+        }
+    }
+
+    void AnnounceUpdate(AvailableUpdate update)
+    {
+        if (IsDisposed) return;
+        RefreshUi();
+        if (settings.LastAnnouncedUpdate == update.Tag) return;
+
+        settings.LastAnnouncedUpdate = update.Tag;
+        settings.Save();
+        balloonIsUpdate = true;
+        tray.ShowBalloonTip(8000, BuildInfo.AppName,
+            $"Version {update.Version} is available. Click here to open the download page.", ToolTipIcon.Info);
+    }
+
+    void OpenUpdatePage()
+    {
+        if (updates.Available is { } update) OpenUrl(update.PageUrl);
+    }
+
     static void OpenUrl(string url)
     {
         try
@@ -467,7 +517,8 @@ sealed class MainForm : Form
         SuspendLayout();
         try
         {
-            RenderHeader();
+            var snapshot = Snapshot();
+            RenderHeader(snapshot);
             RenderSteam();
             RenderSpotify();
 
@@ -475,7 +526,13 @@ sealed class MainForm : Form
             chkPause.Checked = settings.Paused;
             updatingPause = false;
             trayPause.Checked = settings.Paused;
-            tray.Text = Truncate($"{BuildInfo.AppName}: {lblStatus.Text}", 63);
+
+            var update = updates.Available;
+            lnkUpdate.Visible = update is not null;
+            lnkUpdate.Text = update is null ? "" : $"Update to {update.Version}";
+            trayUpdate.Visible = update is not null;
+            trayUpdate.Text = update is null ? "" : $"Download version {update.Version}…";
+            tray.Text = StatusSummary.TrayText(snapshot);
         }
         finally
         {
@@ -483,42 +540,23 @@ sealed class MainForm : Form
         }
     }
 
-    void RenderHeader()
+    StatusSnapshot Snapshot()
     {
         var steam = sync.Steam;
-        string status, sub;
+        return new StatusSnapshot(
+            sync.Paused,
+            steam.State,
+            steam.HasSavedLogin,
+            sync.Spotify?.IsConnected == true,
+            steam.PlayingBlocked,
+            sync.StatusText,
+            sync.CurrentTrack,
+            sync.SpotifyProblem);
+    }
 
-        if (sync.Paused)
-        {
-            status = "Paused";
-            sub = "Sharing is paused, so your Steam status is left alone.";
-        }
-        else if (steam.State != SteamState.Online)
-        {
-            status = "Not live";
-            sub = steam.HasSavedLogin ? "Connecting to Steam…" : "Sign in to Steam below to start.";
-        }
-        else if (sync.Spotify?.IsConnected != true)
-        {
-            status = "Not live";
-            sub = "Connect Spotify below to start.";
-        }
-        else if (steam.PlayingBlocked)
-        {
-            status = "In a game";
-            sub = "You're playing something on Steam. Your song comes back when you stop.";
-        }
-        else if (sync.StatusText is { } text)
-        {
-            status = text;
-            sub = sync.CurrentTrack?.IsPlaying == true ? "Showing now." : "Showing while nothing's playing.";
-        }
-        else
-        {
-            status = "Nothing playing";
-            sub = "Your normal Steam status is showing.";
-        }
-
+    void RenderHeader(StatusSnapshot snapshot)
+    {
+        var (status, sub) = StatusSummary.Header(snapshot);
         lblStatus.Text = status;
         lblSub.Text = sub;
     }
@@ -632,8 +670,6 @@ sealed class MainForm : Form
         btnSpotify.Text = text;
         spotifyAction = action;
     }
-
-    static string Truncate(string s, int max) => s.Length <= max ? s : s[..(max - 1)] + "…";
 
     protected override void Dispose(bool disposing)
     {

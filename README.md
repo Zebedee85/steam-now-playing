@@ -13,7 +13,7 @@ It's one small Windows app. You sign in to Steam by scanning a QR code with the 
 3. **Steam:** click **Sign in**, then scan the QR code with the Steam app on your phone (**Steam Guard** tab → **Scan a QR code**).
 4. **Spotify:** click **Connect** and approve access in your browser.
 
-That's it. Minimise the window and it keeps running in the tray. Right-click the tray icon to pause or quit.
+That's it. Minimise the window and it keeps running in the tray. Hover over the tray icon to see what's showing; right-click it to pause or quit.
 
 > **"Spotify won't let this account use the app yet"?** Spotify limits small apps to five people, each added by hand. Ask whoever sent you the app to add your Spotify email, or [use your own Spotify app](#using-your-own-spotify-app).
 
@@ -23,13 +23,23 @@ That's it. Minimise the window and it keeps running in the tray. Right-click the
 - **Invisible?** Untick *Set me to Online* in **Settings**, or the app will switch you back to Online when it signs in.
 - **Your status text** is editable in **Settings**, using `{track}`, `{artist}` and `{album}`. You can also choose what to show when nothing is playing (the default shows nothing).
 - **Start with Windows** is in **Settings**. The app then starts quietly in the tray.
+- **Updates:** once a day the app checks GitHub for a newer version. If one is out, you get a single notification and an *Update to…* link that opens the release page. It never downloads anything itself. You can turn this off in **Settings**.
 - **From your Steam library (optional):** Steam → *Games* → *Add a Non-Steam Game to My Library* → pick the exe. Then under *Properties*, set *Launch Options* to `--detach`, so Steam's own "In non-Steam game" status doesn't cover yours.
 
 ## Privacy and removal
 
-- The app only talks to Steam and Spotify.
+- The app only talks to Steam, Spotify and, once a day unless you turn it off, GitHub (to check for a newer version).
 - It keeps its files in `%APPDATA%\SteamNowPlaying`: `settings.json`, the Steam and Spotify sign-ins (`steam.dat`, `spotify.dat`, encrypted with Windows DPAPI so only your Windows account can read them), and `log.txt` (no passwords, codes or tokens).
 - To remove everything: **Sign out** and **Disconnect** in the app, quit it, and delete that folder. For good measure, remove *Steam Now Playing* from the Steam app (**Steam Guard → Authorized devices**) and from your Spotify account page (**Manage apps**).
+
+## Checking your download
+
+Each release includes `SHA256SUMS.txt` and a signed GitHub build attestation, so you can confirm the exe was built by this repository's GitHub Actions and hasn't been changed:
+
+```powershell
+Get-FileHash .\SteamNowPlaying.exe -Algorithm SHA256        # compare with SHA256SUMS.txt
+gh attestation verify .\SteamNowPlaying.exe -R Zebedee85/steam-now-playing
+```
 
 ## Using your own Spotify app
 
@@ -44,7 +54,8 @@ Needed if the person who shared the app has no spaces left. Spotify requires the
 
 - The built-in Spotify Client ID comes from the repository variable `SPOTIFY_CLIENT_ID` (**Settings → Secrets and variables → Actions → Variables**). It's not a secret: the app uses PKCE, so no client secret is ever shipped.
 - Spotify's development mode allows **up to 5 users** per app. Add each friend's name and Spotify email under your app's **User Management** in the Spotify dashboard.
-- To publish a version, push a tag such as `v1.0.0`. GitHub Actions runs the tests, builds a single self-contained `SteamNowPlaying.exe` and attaches it to a release.
+- To publish a version, push a tag such as `v1.0.0`. GitHub Actions runs the tests, builds a single self-contained `SteamNowPlaying.exe`, and attaches it to a release with its checksum and build attestation.
+- Plans and ideas live in [ROADMAP.md](ROADMAP.md).
 
 ## Building it yourself
 

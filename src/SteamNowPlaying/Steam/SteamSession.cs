@@ -37,6 +37,7 @@ public sealed class SteamSession : IDisposable
     SteamLogin? login;
     CancellationTokenSource? qrCts;
     int reconnectDelaySeconds = 5;
+    int connectGeneration; // bumped on every start/stop so a stale delayed reconnect does nothing
     bool loggedOn;
     bool playingBlocked;
     string? desiredStatus;
@@ -88,6 +89,7 @@ public sealed class SteamSession : IDisposable
     {
         if (wantOnline) return;
         wantOnline = true;
+        Interlocked.Increment(ref connectGeneration);
         reconnectDelaySeconds = 5;
         SetState(SteamState.Connecting, null);
         client.Connect();
@@ -97,6 +99,7 @@ public sealed class SteamSession : IDisposable
     public void CancelSignIn()
     {
         wantOnline = false;
+        Interlocked.Increment(ref connectGeneration);
         qrCts?.Cancel();
         client.Disconnect();
         SetState(SteamState.SignedOut, null);
@@ -106,6 +109,7 @@ public sealed class SteamSession : IDisposable
     public void SignOut()
     {
         wantOnline = false;
+        Interlocked.Increment(ref connectGeneration);
         qrCts?.Cancel();
         ClearStatusAndLogOff();
         client.Disconnect();
@@ -401,9 +405,10 @@ public sealed class SteamSession : IDisposable
             SetState(SteamState.Reconnecting, $"Connection to Steam lost. Retrying in {delay} s.");
         }
 
+        var generation = Volatile.Read(ref connectGeneration);
         _ = Task.Delay(TimeSpan.FromSeconds(delay)).ContinueWith(_ =>
         {
-            if (running && wantOnline) client.Connect();
+            if (running && wantOnline && generation == Volatile.Read(ref connectGeneration)) client.Connect();
         }, TaskScheduler.Default);
     }
 

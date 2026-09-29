@@ -26,6 +26,12 @@ public sealed class AppSettings
 
     public bool TrayHintShown { get; set; }
 
+    /// <summary>Ask GitHub once a day whether a newer version exists.</summary>
+    public bool CheckForUpdates { get; set; } = true;
+
+    /// <summary>The last release tag we popped up a notification for, so each one is only announced once.</summary>
+    public string LastAnnouncedUpdate { get; set; } = "";
+
     static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     public static string Folder { get; set; } =
@@ -46,6 +52,7 @@ public sealed class AppSettings
         catch (Exception ex)
         {
             Log.Write("Settings unreadable, using defaults: " + ex.Message);
+            KeepUnreadableCopy();
         }
 
         settings ??= new AppSettings();
@@ -55,6 +62,19 @@ public sealed class AppSettings
             settings.Save();
         }
         return settings;
+    }
+
+    /// <summary>Keeps a corrupt settings file for troubleshooting instead of overwriting it with defaults.</summary>
+    static void KeepUnreadableCopy()
+    {
+        try
+        {
+            File.Copy(FilePath, FilePath + ".bad", overwrite: true);
+        }
+        catch
+        {
+            // Nothing more we can do.
+        }
     }
 
     public void Save()

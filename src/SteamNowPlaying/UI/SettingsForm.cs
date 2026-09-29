@@ -13,6 +13,7 @@ sealed class SettingsForm : Form
     readonly TextBox txtIdle = new();
     readonly CheckBox chkOnline = new();
     readonly CheckBox chkStartup = new();
+    readonly CheckBox chkUpdates = new();
     readonly TextBox txtClientId = new();
 
     public SettingsForm(AppSettings settings)
@@ -36,6 +37,7 @@ sealed class SettingsForm : Form
         txtIdle.Text = settings.IdleText;
         chkOnline.Checked = settings.GoOnline;
         chkStartup.Checked = StartupRegistration.IsEnabled;
+        chkUpdates.Checked = settings.CheckForUpdates;
         txtClientId.Text = settings.SpotifyClientId;
     }
 
@@ -102,6 +104,12 @@ sealed class SettingsForm : Form
         chkStartup.Margin = new Padding(0, S(4), 0, S(4));
         Add(chkStartup);
 
+        chkUpdates.Text = "Tell me when a new version is out";
+        chkUpdates.AutoSize = true;
+        chkUpdates.Margin = new Padding(0, 0, 0, S(4));
+        Add(chkUpdates);
+        Add(Hint("Asks this project's GitHub page for the latest version number once a day. It never downloads anything by itself."));
+
         Add(Caption("Spotify Client ID"));
         Box(txtClientId);
         Add(txtClientId);
@@ -153,6 +161,7 @@ sealed class SettingsForm : Form
         settings.IdleText = txtIdle.Text.Trim();
         settings.GoOnline = chkOnline.Checked;
         settings.SpotifyClientId = txtClientId.Text.Trim();
+        settings.CheckForUpdates = chkUpdates.Checked;
         settings.Save();
 
         if (chkStartup.Checked != StartupRegistration.IsEnabled)

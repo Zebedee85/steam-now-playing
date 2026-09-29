@@ -7,6 +7,7 @@ using Xunit;
 namespace SteamNowPlaying.Tests;
 
 /// <summary>Exercises polling, token refresh and error handling against a fake Spotify.</summary>
+[Collection(SettingsFolderCollection.Name)]
 public sealed class SpotifyClientTests : IDisposable
 {
     readonly string folder = Path.Combine(Path.GetTempPath(), "snp-tests-" + Guid.NewGuid().ToString("N"));
